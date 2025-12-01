@@ -25,14 +25,18 @@ class CoreFlexbot(commands.Bot):
         await self.load_extension("cogs.help")
         
         # Sync commands
-        if GUILD_ID and GUILD_ID.isdigit():
-            guild = discord.Object(id=int(GUILD_ID))
-            self.tree.copy_global_to(guild=guild)
-            await self.tree.sync(guild=guild)
-            print(f"Commands synced to guild {GUILD_ID}")
-        else:
-            print("No specific GUILD_ID found or invalid. Syncing globally (this may take up to 1 hour).")
-            await self.tree.sync()
+        # We sync globally so commands are available in all guilds the bot joins.
+        # This can take up to 1 hour to propagate, but ensures multi-guild support.
+        # If immediate testing is needed in a specific guild, uncomment the guild sync block below temporarily.
+        
+        # if GUILD_ID and GUILD_ID.isdigit():
+        #     guild = discord.Object(id=int(GUILD_ID))
+        #     self.tree.copy_global_to(guild=guild)
+        #     await self.tree.sync(guild=guild)
+        #     print(f"Commands synced to guild {GUILD_ID}")
+        # else:
+        print("Syncing commands globally (this may take up to 1 hour to propagate)...")
+        await self.tree.sync()
             
         print("Bot is ready and commands synced.")
 

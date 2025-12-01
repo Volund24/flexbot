@@ -27,8 +27,9 @@
           session.close()
       ```
 - **Command Syncing**:
-    - Commands are synced globally if `DISCORD_GUILD_ID` is not set, or to a specific guild if it is.
-    - Global sync takes up to 1 hour; Guild sync is instant.
+    - Commands are synced **globally** to support multi-guild usage.
+    - Global sync takes up to 1 hour to propagate to all servers.
+    - Guild-specific sync is disabled by default but can be enabled for local debugging.
 
 ## Project-Specific Conventions
 - **NFT Rarity Tiers**:
