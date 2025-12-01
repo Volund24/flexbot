@@ -65,7 +65,46 @@ class Flex(commands.Cog):
         finally:
             session.close()
 
+    async def trait_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        session = get_session()
+        try:
+            # 1. Get User Wallet
+            player = session.query(FlexPlayer).filter_by(discord_id=interaction.user.id).first()
+            if not player or not player.wallet_address:
+                return []
+
+            # 2. Get Collection Slug
+            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
+            collection_slug = config.collection_slug if config else DEFAULT_COLLECTION
+
+            # 3. Get User's NFTs (Local DB only for speed)
+            user_nfts = session.query(FlexNFT).filter_by(owner_wallet=player.wallet_address, collection_slug=collection_slug).all()
+
+            # 4. Extract Unique Traits
+            traits = set()
+            for nft in user_nfts:
+                if not nft.attributes: continue
+                for attr in nft.attributes:
+                    name = attr.get('name')
+                    value = attr.get('value')
+                    if name and value:
+                        traits.add(f"{name}: {value}")
+            
+            # 5. Filter and Return
+            choices = [
+                app_commands.Choice(name=trait, value=trait)
+                for trait in sorted(list(traits))
+                if current.lower() in trait.lower()
+            ]
+            return choices[:25] # Discord limit is 25 choices
+
+        except Exception:
+            return []
+        finally:
+            session.close()
+
     @app_commands.command(name="flex", description="Flex your NFTs")
+    @app_commands.autocomplete(trait_filter=trait_autocomplete)
     async def flex(self, interaction: discord.Interaction, trait_filter: str = None):
         await interaction.response.defer()
         
@@ -95,17 +134,33 @@ class Flex(commands.Cog):
 
             # Filter by trait if requested
             if trait_filter:
-                # trait_filter format "trait:value" or just "value"
+                # Check if filter is in "Trait: Value" format from autocomplete
+                filter_name = None
+                filter_value = trait_filter
+                if ": " in trait_filter:
+                    parts = trait_filter.split(": ", 1)
+                    if len(parts) == 2:
+                        filter_name = parts[0]
+                        filter_value = parts[1]
+
                 filtered_nfts = []
                 for nft in user_nfts:
                     attributes = nft.get('attributes', [])
-                    # Check if any attribute matches the filter
-                    # Simple check: value contains filter or name contains filter
                     match = False
                     for attr in attributes:
-                        if trait_filter.lower() in attr.get('value', '').lower() or trait_filter.lower() in attr.get('name', '').lower():
-                            match = True
-                            break
+                        attr_name = attr.get('name', '')
+                        attr_value = str(attr.get('value', ''))
+                        
+                        # If we have a specific name from autocomplete, match both
+                        if filter_name:
+                            if attr_name == filter_name and attr_value == filter_value:
+                                match = True
+                                break
+                        # Fallback to loose matching if user typed manually
+                        else:
+                            if trait_filter.lower() in attr_value.lower() or trait_filter.lower() in attr_name.lower():
+                                match = True
+                                break
                     if match:
                         filtered_nfts.append(nft)
                 

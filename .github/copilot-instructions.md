@@ -12,6 +12,7 @@
 - **`cogs/flex.py`**: Main "flex" functionality.
     - **Hybrid Data Fetching**: Fetches *ownership* live from HowRare.is API, but relies on *local DB* for NFT metadata (rank, image).
     - **Rarity Logic**: Contains specific business logic for mapping Rank -> Color/Status (Mythic, Epic, etc.).
+    - **Autocomplete**: The `/flex` command uses dynamic autocomplete for traits, querying the local DB for the user's owned traits.
 
 ## Developer Workflows
 - **Database Management**:
