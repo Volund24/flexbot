@@ -34,6 +34,15 @@ class Admin(commands.Cog):
         # Exit with status 1 so Docker/Systemd restarts it
         sys.exit(1)
 
+    @app_commands.command(name="admin_stop", description="Gracefully shut down the bot")
+    async def admin_stop(self, interaction: discord.Interaction):
+        if not self.is_admin(interaction):
+            await interaction.response.send_message("You do not have permission.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("Shutting down bot... (Container may auto-restart depending on policy)", ephemeral=True)
+        await self.bot.close()
+
     @app_commands.command(name="admin_stop_sync", description="Stop any active collection sync")
     async def admin_stop_sync(self, interaction: discord.Interaction):
         if not self.is_admin(interaction):
