@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  flexbot:
+    build: .
+    container_name: flexbot
+    restart: unless-stopped
+    # Mount the database file for local persistence if using SQLite
+    # If using Supabase/Postgres, this volume is not strictly necessary but harmless
+    volumes:
+      - ./flexbot.db:/app/flexbot.db
+    env_file:
+      - .env
+    # If you want to use a local Postgres container instead of Supabase, uncomment below:
+    # depends_on:
+    #   - db
+
+  # db:
+  #   image: postgres:15-alpine
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   environment:
+  #     POSTGRES_USER: user
+  #     POSTGRES_PASSWORD: password
+  #     POSTGRES_DB: flexbot
+
+# volumes:
+#   postgres_data:
