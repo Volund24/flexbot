@@ -131,34 +131,37 @@ class Flex(commands.Cog):
             
             if is_signed or rank == 1:
                 color = 0xFFD700 # Gold (for 1/1 or Signed)
+                rarity_status = "1/1" if rank == 1 else "Signed"
             elif 1 <= rank <= 71:
                 color = 0x9932CC # Mythic (Purple)
+                rarity_status = "Mythic"
             elif 72 <= rank <= 361:
                 color = 0xFFA500 # Epic (Orange)
+                rarity_status = "Epic"
             elif 362 <= rank <= 843:
                 color = 0x1E90FF # Rare (Blue)
+                rarity_status = "Rare"
             elif 844 <= rank <= 1446:
                 color = 0x32CD32 # Uncommon (Green)
+                rarity_status = "Uncommon"
             else:
                 color = 0xADFF2F # Common (Yellow-Green)
+                rarity_status = "Common"
 
             # Build Embed
-            embed = discord.Embed(title=f"{top_nft['name']} (Rank #{top_nft['rank']})", color=color)
+            embed = discord.Embed(title=f"{top_nft['name']}", color=color)
             embed.set_author(name=interaction.user.display_name)
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
             
-            # Add top 2 attributes by rarity
-            attributes = top_nft.get('attributes', [])
-            # Sort attributes by rarity (ascending float)
-            try:
-                attributes.sort(key=lambda x: float(x.get('rarity', 100)))
-            except:
-                pass # Keep original order if parsing fails
-                
-            for attr in attributes[:2]: # Show top 2
-                embed.add_field(name=attr['name'], value=f"{attr['value']} ({attr['rarity']}%)", inline=True)
+            # Field 1: Rank
+            embed.add_field(name="Rank", value=f"#{rank}", inline=True)
+            
+            # Field 2: Rarity Status
+            embed.add_field(name="Rarity", value=rarity_status, inline=True)
 
+            # Field 3: Owned Count
             embed.add_field(name="Owned", value=str(len(user_nfts)), inline=True)
+            
             embed.set_image(url=top_nft['image'])
             
             await interaction.followup.send(embed=embed)
