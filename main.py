@@ -38,7 +38,6 @@ class CoreFlexbot(commands.Bot):
 
     async def on_ready(self):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
-        print("!!! I AM THE NEW BOT VERSION - THUMBNAIL UPDATE !!!")
         try:
             init_db()
             print("Database initialized.")
