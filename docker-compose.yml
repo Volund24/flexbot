@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   flexbot:
     build: .
     container_name: flexbot
     restart: unless-stopped
+    network_mode: "host" # Use host networking to resolve IPv6/DNS issues with Supabase
     # Mount the database file for local persistence if using SQLite
     # If using Supabase/Postgres, this volume is not strictly necessary but harmless
     volumes:
