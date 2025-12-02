@@ -130,7 +130,7 @@ class Flex(commands.Cog):
                 if item_count == 0:
                      await interaction.followup.send(f"Database is empty for collection `{collection_slug}`. Please ask an admin to run `/admin_sync_collection` first.")
                 else:
-                    await interaction.followup.send(f"Could not find any NFTs from collection `{collection_slug}` in wallet `{player.wallet_address}`. (Database has {item_count} items).")
+                    await interaction.followup.send(f"Could not find any NFTs from collection `{collection_slug}` in wallet `{player.wallet_address}`.")
                 return
 
             # Filter by trait if requested

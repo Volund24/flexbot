@@ -1,6 +1,6 @@
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
 import os
 import aiohttp
@@ -16,6 +16,93 @@ class Admin(commands.Cog):
         self.bot = bot
         self.is_syncing = False
         self.stop_sync_flag = False
+        # Start the background sync task
+        self.auto_sync_task.start()
+
+    def cog_unload(self):
+        self.auto_sync_task.cancel()
+
+    @tasks.loop(hours=24)
+    async def auto_sync_task(self):
+        """
+        Background task to sync collection metadata periodically.
+        This ensures new mints or metadata updates are captured even if no admin triggers it.
+        """
+        # Wait until bot is ready
+        await self.bot.wait_until_ready()
+        
+        if self.is_syncing:
+            print("Auto-sync skipped because a sync is already in progress.")
+            return
+
+        print("Starting scheduled auto-sync of collections...")
+        self.is_syncing = True
+        session = get_session()
+        try:
+            # Get all unique collection slugs configured in the DB
+            # If no guilds configured, fallback to env var
+            configs = session.query(FlexGuildConfig).all()
+            slugs = set(c.collection_slug for c in configs)
+            if not slugs:
+                slugs.add(os.getenv("HOWRARE_COLLECTION", "the_growerz"))
+
+            for collection_slug in slugs:
+                print(f"Auto-syncing collection: {collection_slug}")
+                
+                # Fetch full collection data
+                url = f"{HOWRARE_API_BASE}/collections/{collection_slug}"
+                async with aiohttp.ClientSession() as http_session:
+                    async with http_session.get(url) as response:
+                        if response.status != 200:
+                            print(f"Error fetching collection {collection_slug}: {response.status}")
+                            continue
+                        data = await response.json()
+
+                items = data.get('result', {}).get('data', {}).get('items', [])
+                if not items:
+                    print(f"No items found for {collection_slug}")
+                    continue
+
+                # Upsert items
+                count = 0
+                for item in items:
+                    if self.stop_sync_flag: # Allow admin to stop even auto-sync
+                        break
+
+                    mint = item.get('mint')
+                    if not mint: continue
+
+                    nft = session.query(FlexNFT).filter_by(mint=mint).first()
+                    if not nft:
+                        nft = FlexNFT(mint=mint)
+                        session.add(nft)
+                    
+                    nft.collection_slug = collection_slug
+                    nft.name = item.get('name')
+                    nft.rank = item.get('rank')
+                    nft.image_url = item.get('image')
+                    nft.attributes = item.get('attributes')
+                    nft.last_updated = time.time()
+                    count += 1
+                    
+                    if count % 100 == 0:
+                        session.commit()
+                        await asyncio.sleep(0) # Yield
+
+                session.commit()
+                print(f"Auto-sync finished for {collection_slug}: {count} items processed.")
+
+        except Exception as e:
+            print(f"Error in auto_sync_task: {e}")
+            session.rollback()
+        finally:
+            session.close()
+            self.is_syncing = False
+            self.stop_sync_flag = False
+
+    @auto_sync_task.before_loop
+    async def before_auto_sync(self):
+        await self.bot.wait_until_ready()
 
     def is_admin(self, interaction: discord.Interaction) -> bool:
         # Check if user has the configured Admin role OR is the server owner OR has Administrator permission
