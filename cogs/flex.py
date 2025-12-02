@@ -3,6 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 import os
+import random
 from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
 
 HOWRARE_API_BASE = os.getenv("HOWRARE_API_BASE", "https://api.howrare.is/v0.1")
@@ -171,8 +172,11 @@ class Flex(commands.Cog):
 
             # Select the best NFT to flex (e.g., highest rank - lower is better usually)
             # Assuming 'rank' is an integer where 1 is best
-            user_nfts.sort(key=lambda x: int(x.get('rank', 999999)))
-            top_nft = user_nfts[0]
+            # user_nfts.sort(key=lambda x: int(x.get('rank', 999999)))
+            # top_nft = user_nfts[0]
+            
+            # Randomize selection from the filtered list
+            top_nft = random.choice(user_nfts)
             
             # Determine Color based on Rank
             rank = int(top_nft.get('rank', 999999))
