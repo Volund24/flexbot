@@ -1,59 +1,95 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import aiohttp
 import os
 import random
 from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
+from shared.solana_utils import get_assets_by_owner
+from shared.rarity_config import RARITY_CONFIGS
 
 HOWRARE_API_BASE = os.getenv("HOWRARE_API_BASE", "https://api.howrare.is/v0.1")
 DEFAULT_COLLECTION = os.getenv("HOWRARE_COLLECTION", "the_growerz")
 
+def get_rarity_info(rank: int, attributes: list, collection_slug: str):
+    """
+    Determines the rarity name and color for a given rank and attributes based on the collection configuration.
+    """
+    config = RARITY_CONFIGS.get(collection_slug)
+    
+    # Default fallback if config doesn't exist
+    if not config:
+        return "Ranked", 0x808080 # Grey
+
+    # 1. Check Special Attributes
+    for special in config.get("special_attributes", []):
+        for attr in attributes:
+            if attr.get('name') == special['trait_type'] and str(attr.get('value')).lower() == special['value'].lower():
+                return special['name'], special['color']
+
+    # 2. Check Rank Tiers
+    for tier in config.get("tiers", []):
+        if rank <= tier['max_rank']:
+            return tier['name'], tier['color']
+            
+    return "Common", 0xADFF2F
+
 class Flex(commands.Cog):
+    """
+    Cog responsible for the main 'flex' functionality: displaying user NFTs with rarity info.
+    """
     def __init__(self, bot):
         self.bot = bot
 
     async def fetch_nfts(self, wallet_address: str, collection_slug: str):
+        """
+        Fetches NFTs for a wallet from the Solana RPC (DAS API) and merges with local DB data.
+        """
         session = get_session()
         try:
-            # 1. Fetch Owners (Lightweight)
-            owners_url = f"{HOWRARE_API_BASE}/collections/{collection_slug}/owners"
-            async with aiohttp.ClientSession() as http_session:
-                async with http_session.get(owners_url) as response:
-                    if response.status == 200:
-                        owners_data = await response.json()
-                        owners_map = owners_data.get('result', {}).get('data', {}).get('owners', {})
-                        
-                        # Update ownership in DB for this user's mints (and clear old ones if needed)
-                        # For efficiency, we only update mints that match the wallet or were previously owned by it
-                        # But simpler approach: Find all mints in DB that *should* be owned by this wallet
-                        
-                        owned_mints = {mint for mint, owner in owners_map.items() if owner == wallet_address}
-                        
-                        # Bulk update is complex in ORM, let's do simple iteration for now or raw SQL
-                        # Reset previous ownership for this wallet (optional, but good for correctness)
-                        # session.query(FlexNFT).filter_by(owner_wallet=wallet_address).update({"owner_wallet": None})
-                        
-                        # Update new ownership
-                        if owned_mints:
-                            # We only update mints that exist in our DB (synced via admin command)
-                            # This avoids inserting partial data
-                            mints_in_db = session.query(FlexNFT).filter(FlexNFT.mint.in_(owned_mints)).all()
-                            for nft in mints_in_db:
-                                nft.owner_wallet = wallet_address
-                            
-                            session.commit()
+            # 1. Fetch Assets via Solana RPC (DAS API)
+            # This returns a list of dicts: {mint, name, image, attributes}
+            assets = await get_assets_by_owner(wallet_address)
             
-            # 2. Query DB for user's NFTs
-            user_nfts = session.query(FlexNFT).filter_by(owner_wallet=wallet_address, collection_slug=collection_slug).all()
+            if not assets:
+                return []
+
+            # Extract mints to query DB
+            owned_mints = [asset['mint'] for asset in assets]
             
-            # Convert to dict-like structure to match previous logic
+            # 2. Update ownership in DB (Optional but good for sync)
+            # Find which of these mints belong to our collection (exist in DB)
+            mints_in_db = session.query(FlexNFT).filter(
+                FlexNFT.mint.in_(owned_mints),
+                FlexNFT.collection_slug == collection_slug
+            ).all()
+            
+            # Update ownership
+            for nft in mints_in_db:
+                nft.owner_wallet = wallet_address
+            session.commit()
+            
+            # 3. Merge Live Data (Image/Name) with Static Data (Rank)
+            # We iterate over the DB results (which filters for the correct collection)
+            # and enrich them with the live image URL from the RPC response.
+            
+            # Create a lookup map for the live assets
+            asset_map = {asset['mint']: asset for asset in assets}
+            
             results = []
-            for nft in user_nfts:
+            for nft in mints_in_db:
+                live_asset = asset_map.get(nft.mint)
+                
+                # Use live image if available, else fallback to DB
+                image_url = live_asset.get('image') if live_asset else nft.image_url
+                
+                # If live image is missing or empty, fallback to DB
+                if not image_url:
+                    image_url = nft.image_url
+
                 results.append({
                     'name': nft.name,
                     'rank': nft.rank,
-                    'image': nft.image_url,
+                    'image': image_url,
                     'attributes': nft.attributes,
                     'mint': nft.mint
                 })
@@ -67,6 +103,9 @@ class Flex(commands.Cog):
             session.close()
 
     async def trait_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        """
+        Autocomplete function for the 'trait_filter' argument in the /flex command.
+        """
         session = get_session()
         try:
             # 1. Get User Wallet
@@ -74,9 +113,8 @@ class Flex(commands.Cog):
             if not player or not player.wallet_address:
                 return []
 
-            # 2. Get Collection Slug
-            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
-            collection_slug = config.collection_slug if config else DEFAULT_COLLECTION
+            # 2. Get Collection Slug (Strict Mode: Use Env Var)
+            collection_slug = DEFAULT_COLLECTION
 
             # 3. Get User's NFTs (Local DB only for speed)
             user_nfts = session.query(FlexNFT).filter_by(owner_wallet=player.wallet_address, collection_slug=collection_slug).all()
@@ -107,6 +145,9 @@ class Flex(commands.Cog):
     @app_commands.command(name="flex", description="Flex your NFTs")
     @app_commands.autocomplete(trait_filter=trait_autocomplete)
     async def flex(self, interaction: discord.Interaction, trait_filter: str = None):
+        """
+        The main command to display a random NFT owned by the user, optionally filtered by trait.
+        """
         await interaction.response.defer()
         
         session = get_session()
@@ -116,9 +157,8 @@ class Flex(commands.Cog):
                 await interaction.followup.send("You need to link your wallet first using `/link_wallet`.")
                 return
 
-            # Get Guild Config or default
-            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
-            collection_slug = config.collection_slug if config else DEFAULT_COLLECTION
+            # Get Collection Slug (Strict Mode: Use Env Var)
+            collection_slug = DEFAULT_COLLECTION
             
             # Fetch NFTs
             user_nfts = await self.fetch_nfts(player.wallet_address, collection_slug)
@@ -181,31 +221,7 @@ class Flex(commands.Cog):
             # Determine Color based on Rank
             rank = int(top_nft.get('rank', 999999))
             
-            # Check for "Signed by haizeel" attribute
-            is_signed = False
-            for attr in top_nft.get('attributes', []):
-                if attr.get('name') == "Signed by haizeel" and str(attr.get('value')).lower() == "true":
-                    is_signed = True
-                    break
-            
-            if is_signed or rank == 1:
-                color = 0xFFD700 # Gold (for 1/1 or Signed)
-                rarity_status = "1/1" if rank == 1 else "Signed"
-            elif 1 <= rank <= 71:
-                color = 0x9932CC # Mythic (Purple)
-                rarity_status = "Mythic"
-            elif 72 <= rank <= 361:
-                color = 0xFFA500 # Epic (Orange)
-                rarity_status = "Epic"
-            elif 362 <= rank <= 843:
-                color = 0x1E90FF # Rare (Blue)
-                rarity_status = "Rare"
-            elif 844 <= rank <= 1446:
-                color = 0x32CD32 # Uncommon (Green)
-                rarity_status = "Uncommon"
-            else:
-                color = 0xADFF2F # Common (Yellow-Green)
-                rarity_status = "Common"
+            rarity_status, color = get_rarity_info(rank, top_nft.get('attributes', []), collection_slug)
 
             # Build Embed
             embed = discord.Embed(title=f"{top_nft['name']}", color=color)

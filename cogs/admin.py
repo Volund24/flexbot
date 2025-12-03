@@ -17,7 +17,7 @@ class Admin(commands.Cog):
         self.is_syncing = False
         self.stop_sync_flag = False
         # Start the background sync task
-        self.auto_sync_task.start()
+        # self.auto_sync_task.start() # Disabled to prevent startup crash/race conditions
 
     def cog_unload(self):
         self.auto_sync_task.cancel()
@@ -39,12 +39,9 @@ class Admin(commands.Cog):
         self.is_syncing = True
         session = get_session()
         try:
-            # Get all unique collection slugs configured in the DB
-            # If no guilds configured, fallback to env var
-            configs = session.query(FlexGuildConfig).all()
-            slugs = set(c.collection_slug for c in configs)
-            if not slugs:
-                slugs.add(os.getenv("HOWRARE_COLLECTION", "the_growerz"))
+            # Strict Mode: Only sync the collection defined in ENV
+            collection_slug = os.getenv("HOWRARE_COLLECTION", "the_growerz")
+            slugs = {collection_slug}
 
             for collection_slug in slugs:
                 print(f"Auto-syncing collection: {collection_slug}")
@@ -159,9 +156,8 @@ class Admin(commands.Cog):
         await interaction.response.defer()
         session = get_session()
         try:
-            # Get collection slug
-            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
-            collection_slug = config.collection_slug if config else os.getenv("HOWRARE_COLLECTION", "the_growerz")
+            # Get collection slug (Strict Mode: Use Env Var)
+            collection_slug = os.getenv("HOWRARE_COLLECTION", "the_growerz")
 
             # Fetch full collection data
             url = f"{HOWRARE_API_BASE}/collections/{collection_slug}"
@@ -238,22 +234,25 @@ class Admin(commands.Cog):
             await interaction.response.send_message("You do not have permission.", ephemeral=True)
             return
 
-        session = get_session()
-        try:
-            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
-            if not config:
-                config = FlexGuildConfig(guild_id=interaction.guild_id, collection_slug=collection_slug)
-                session.add(config)
-            else:
-                config.collection_slug = collection_slug
+        await interaction.response.send_message("This command is disabled in Strict Mode. The collection is set via environment variables.", ephemeral=True)
+        return
+        
+        # session = get_session()
+        # try:
+        #     config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
+        #     if not config:
+        #         config = FlexGuildConfig(guild_id=interaction.guild_id, collection_slug=collection_slug)
+        #         session.add(config)
+        #     else:
+        #         config.collection_slug = collection_slug
             
-            session.commit()
-            await interaction.response.send_message(f"Collection set to `{collection_slug}`.", ephemeral=True)
-        except Exception as e:
-            session.rollback()
-            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
-        finally:
-            session.close()
+        #     session.commit()
+        #     await interaction.response.send_message(f"Collection set to `{collection_slug}`.", ephemeral=True)
+        # except Exception as e:
+        #     session.rollback()
+        #     await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+        # finally:
+        #     session.close()
 
     @app_commands.command(name="admin_set_wallet", description="Manually link a wallet for a user")
     async def admin_set_wallet(self, interaction: discord.Interaction, user: discord.User, address: str):

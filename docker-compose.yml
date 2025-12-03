@@ -1,27 +1,42 @@
 services:
-  flexbot:
+  flexbot_thc:
     build: .
-    container_name: flexbot
+    container_name: flexbot_thc
     restart: unless-stopped
-    network_mode: "host" # Use host networking to resolve IPv6/DNS issues with Supabase
-    # Mount the database file for local persistence if using SQLite
-    # If using Supabase/Postgres, this volume is not strictly necessary but harmless
+    network_mode: "host"
+    env_file:
+      - .env.thc
     volumes:
       - ./flexbot.db:/app/flexbot.db
+
+  flexbot_midevils:
+    build: .
+    container_name: flexbot_midevils
+    restart: unless-stopped
+    network_mode: "host"
     env_file:
-      - .env
-    # If you want to use a local Postgres container instead of Supabase, uncomment below:
-    # depends_on:
-    #   - db
+      - .env.midevils
+    volumes:
+      - ./flexbot.db:/app/flexbot.db
 
-  # db:
-  #   image: postgres:15-alpine
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   environment:
-  #     POSTGRES_USER: user
-  #     POSTGRES_PASSWORD: password
-  #     POSTGRES_DB: flexbot
+  # Future Collections (Uncomment when ready)
+  flexbot_gainz:
+    build: .
+    container_name: flexbot_gainz
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env.gainz
+    volumes:
+      - ./flexbot.db:/app/flexbot.db
+  
+  flexbot_gigabuds:
+    build: .
+    container_name: flexbot_gigabuds
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env.gigabuds
+    volumes:
+      - ./flexbot.db:/app/flexbot.db
 
-# volumes:
-#   postgres_data:
