@@ -113,9 +113,8 @@ class Flex(commands.Cog):
             if not player or not player.wallet_address:
                 return []
 
-            # 2. Get Collection Slug
-            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
-            collection_slug = config.collection_slug if config else DEFAULT_COLLECTION
+            # 2. Get Collection Slug (Strict Mode: Use Env Var)
+            collection_slug = DEFAULT_COLLECTION
 
             # 3. Get User's NFTs (Local DB only for speed)
             user_nfts = session.query(FlexNFT).filter_by(owner_wallet=player.wallet_address, collection_slug=collection_slug).all()
@@ -158,9 +157,8 @@ class Flex(commands.Cog):
                 await interaction.followup.send("You need to link your wallet first using `/link_wallet`.")
                 return
 
-            # Get Guild Config or default
-            config = session.query(FlexGuildConfig).filter_by(guild_id=interaction.guild_id).first()
-            collection_slug = config.collection_slug if config else DEFAULT_COLLECTION
+            # Get Collection Slug (Strict Mode: Use Env Var)
+            collection_slug = DEFAULT_COLLECTION
             
             # Fetch NFTs
             user_nfts = await self.fetch_nfts(player.wallet_address, collection_slug)
