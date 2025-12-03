@@ -5,7 +5,7 @@ import aiohttp
 import os
 import random
 from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
-from shared.solana_utils import get_wallet_tokens
+from shared.solana_utils import get_assets_by_owner
 
 HOWRARE_API_BASE = os.getenv("HOWRARE_API_BASE", "https://api.howrare.is/v0.1")
 DEFAULT_COLLECTION = os.getenv("HOWRARE_COLLECTION", "the_growerz")
@@ -95,37 +95,50 @@ class Flex(commands.Cog):
     async def fetch_nfts(self, wallet_address: str, collection_slug: str):
         session = get_session()
         try:
-            # 1. Fetch Owners via Solana RPC (Direct On-Chain)
-            # This replaces the HowRare API call for ownership
-            owned_mints = await get_wallet_tokens(wallet_address)
+            # 1. Fetch Assets via Solana RPC (DAS API)
+            # This returns a list of dicts: {mint, name, image, attributes}
+            assets = await get_assets_by_owner(wallet_address)
             
-            if owned_mints:
-                # 2. Update ownership in DB
-                # First, clear old ownership for this wallet (optional but cleaner)
-                # session.query(FlexNFT).filter_by(owner_wallet=wallet_address).update({"owner_wallet": None})
-                
-                # Find which of these mints belong to our collection (exist in DB)
-                mints_in_db = session.query(FlexNFT).filter(
-                    FlexNFT.mint.in_(owned_mints),
-                    FlexNFT.collection_slug == collection_slug
-                ).all()
-                
-                # Update ownership
-                for nft in mints_in_db:
-                    nft.owner_wallet = wallet_address
-                
-                session.commit()
+            if not assets:
+                return []
+
+            # Extract mints to query DB
+            owned_mints = [asset['mint'] for asset in assets]
             
-            # 3. Query DB for user's NFTs
-            user_nfts = session.query(FlexNFT).filter_by(owner_wallet=wallet_address, collection_slug=collection_slug).all()
+            # 2. Update ownership in DB (Optional but good for sync)
+            # Find which of these mints belong to our collection (exist in DB)
+            mints_in_db = session.query(FlexNFT).filter(
+                FlexNFT.mint.in_(owned_mints),
+                FlexNFT.collection_slug == collection_slug
+            ).all()
             
-            # Convert to dict-like structure
+            # Update ownership
+            for nft in mints_in_db:
+                nft.owner_wallet = wallet_address
+            session.commit()
+            
+            # 3. Merge Live Data (Image/Name) with Static Data (Rank)
+            # We iterate over the DB results (which filters for the correct collection)
+            # and enrich them with the live image URL from the RPC response.
+            
+            # Create a lookup map for the live assets
+            asset_map = {asset['mint']: asset for asset in assets}
+            
             results = []
-            for nft in user_nfts:
+            for nft in mints_in_db:
+                live_asset = asset_map.get(nft.mint)
+                
+                # Use live image if available, else fallback to DB
+                image_url = live_asset.get('image') if live_asset else nft.image_url
+                
+                # If live image is missing or empty, fallback to DB
+                if not image_url:
+                    image_url = nft.image_url
+
                 results.append({
                     'name': nft.name,
                     'rank': nft.rank,
-                    'image': nft.image_url,
+                    'image': image_url,
                     'attributes': nft.attributes,
                     'mint': nft.mint
                 })
