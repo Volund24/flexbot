@@ -42,6 +42,28 @@ RARITY_CONFIGS = {
             {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
         ],
         "special_attributes": []
+    },
+    "gainz": {
+        "tiers": [
+            {"max_rank": 1, "name": "1/1", "color": 0xFFD700},
+            {"max_rank": 71, "name": "Mythic", "color": 0x9932CC},
+            {"max_rank": 361, "name": "Epic", "color": 0xFFA500},
+            {"max_rank": 843, "name": "Rare", "color": 0x1E90FF},
+            {"max_rank": 1446, "name": "Uncommon", "color": 0x32CD32},
+            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
+        ],
+        "special_attributes": []
+    },
+    "giga_buds": {
+        "tiers": [
+            {"max_rank": 1, "name": "1/1", "color": 0xFFD700},
+            {"max_rank": 71, "name": "Mythic", "color": 0x9932CC},
+            {"max_rank": 361, "name": "Epic", "color": 0xFFA500},
+            {"max_rank": 843, "name": "Rare", "color": 0x1E90FF},
+            {"max_rank": 1446, "name": "Uncommon", "color": 0x32CD32},
+            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
+        ],
+        "special_attributes": []
     }
 }
 
