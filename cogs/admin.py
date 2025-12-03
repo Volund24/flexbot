@@ -17,7 +17,7 @@ class Admin(commands.Cog):
         self.is_syncing = False
         self.stop_sync_flag = False
         # Start the background sync task
-        self.auto_sync_task.start()
+        # self.auto_sync_task.start() # Disabled to prevent startup crash/race conditions
 
     def cog_unload(self):
         self.auto_sync_task.cancel()
