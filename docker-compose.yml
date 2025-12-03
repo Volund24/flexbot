@@ -20,19 +20,23 @@ services:
       - ./flexbot.db:/app/flexbot.db
 
   # Future Collections (Uncomment when ready)
-  # flexbot_gainz:
-  #   build: .
-  #   container_name: flexbot_gainz
-  #   restart: unless-stopped
-  #   network_mode: "host"
-  #   env_file:
-  #     - .env.gainz
+  flexbot_gainz:
+    build: .
+    container_name: flexbot_gainz
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env.gainz
+    volumes:
+      - ./flexbot.db:/app/flexbot.db
   
-  # flexbot_gigabuds:
-  #   build: .
-  #   container_name: flexbot_gigabuds
-  #   restart: unless-stopped
-  #   network_mode: "host"
-  #   env_file:
-  #     - .env.gigabuds
+  flexbot_gigabuds:
+    build: .
+    container_name: flexbot_gigabuds
+    restart: unless-stopped
+    network_mode: "host"
+    env_file:
+      - .env.gigabuds
+    volumes:
+      - ./flexbot.db:/app/flexbot.db
 
