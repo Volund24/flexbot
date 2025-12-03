@@ -40,12 +40,16 @@ ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
     mkdir -p $APP_DIR
 EOF
 
-# 2. Copy local .env to server
-echo -e "${GREEN}📦 Copying local .env file to server...${NC}"
-scp -o StrictHostKeyChecking=no .env $SERVER_USER@$SERVER_IP:$APP_DIR/.env
+# 2. Copy local .env files to server
+echo -e "${GREEN}📦 Copying local .env files to server...${NC}"
+scp -o StrictHostKeyChecking=no .env.thc $SERVER_USER@$SERVER_IP:$APP_DIR/.env.thc
+scp -o StrictHostKeyChecking=no .env.midevils $SERVER_USER@$SERVER_IP:$APP_DIR/.env.midevils
+# Optional: Copy placeholders if they exist locally
+if [ -f ".env.gainz" ]; then scp -o StrictHostKeyChecking=no .env.gainz $SERVER_USER@$SERVER_IP:$APP_DIR/.env.gainz; fi
+if [ -f ".env.gigabuds" ]; then scp -o StrictHostKeyChecking=no .env.gigabuds $SERVER_USER@$SERVER_IP:$APP_DIR/.env.gigabuds; fi
 
 # 3. SSH to pull code and restart
-echo -e "${GREEN}🔄 Pulling code and restarting container...${NC}"
+echo -e "${GREEN}🔄 Pulling code and restarting containers...${NC}"
 ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
     cd $APP_DIR
 
@@ -55,17 +59,20 @@ ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
         git init
         git remote add origin $REPO_URL
         git fetch
-        # Force checkout main branch
-        git checkout -B main origin/main
+        # Force checkout the feature branch
+        git checkout -B feature/async-admin-sync origin/feature/async-admin-sync
     else
         echo "Pulling latest changes..."
-        git pull origin main
+        git fetch origin
+        git checkout feature/async-admin-sync
+        git pull origin feature/async-admin-sync
     fi
 
-    echo "Building and starting Docker container..."
+    echo "Building and starting Docker containers..."
+    # Remove orphans to clean up old single 'flexbot' container if it exists
     docker compose up -d --build --remove-orphans
 
     echo "✅ Deployment Complete! Checking logs..."
     sleep 2
-    docker compose logs flexbot --tail=20
+    docker compose logs --tail=20
 EOF

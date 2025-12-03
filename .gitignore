@@ -41,3 +41,4 @@ flexbot.db
 
 # OS
 .DS_Store
+.env.*
