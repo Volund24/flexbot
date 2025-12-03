@@ -21,8 +21,7 @@ async def get_assets_by_owner(wallet_address: str):
             "page": 1,
             "limit": 1000,
             "displayOptions": {
-                "showFungible": False,
-                "showNativeBalance": False
+                "showFungible": False
             }
         }
     }
