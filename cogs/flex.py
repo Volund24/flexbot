@@ -5,6 +5,7 @@ import aiohttp
 import os
 import random
 from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
+from shared.solana_utils import get_wallet_tokens
 
 HOWRARE_API_BASE = os.getenv("HOWRARE_API_BASE", "https://api.howrare.is/v0.1")
 DEFAULT_COLLECTION = os.getenv("HOWRARE_COLLECTION", "the_growerz")
@@ -94,38 +95,31 @@ class Flex(commands.Cog):
     async def fetch_nfts(self, wallet_address: str, collection_slug: str):
         session = get_session()
         try:
-            # 1. Fetch Owners (Lightweight)
-            owners_url = f"{HOWRARE_API_BASE}/collections/{collection_slug}/owners"
-            async with aiohttp.ClientSession() as http_session:
-                async with http_session.get(owners_url) as response:
-                    if response.status == 200:
-                        owners_data = await response.json()
-                        owners_map = owners_data.get('result', {}).get('data', {}).get('owners', {})
-                        
-                        # Update ownership in DB for this user's mints (and clear old ones if needed)
-                        # For efficiency, we only update mints that match the wallet or were previously owned by it
-                        # But simpler approach: Find all mints in DB that *should* be owned by this wallet
-                        
-                        owned_mints = {mint for mint, owner in owners_map.items() if owner == wallet_address}
-                        
-                        # Bulk update is complex in ORM, let's do simple iteration for now or raw SQL
-                        # Reset previous ownership for this wallet (optional, but good for correctness)
-                        # session.query(FlexNFT).filter_by(owner_wallet=wallet_address).update({"owner_wallet": None})
-                        
-                        # Update new ownership
-                        if owned_mints:
-                            # We only update mints that exist in our DB (synced via admin command)
-                            # This avoids inserting partial data
-                            mints_in_db = session.query(FlexNFT).filter(FlexNFT.mint.in_(owned_mints)).all()
-                            for nft in mints_in_db:
-                                nft.owner_wallet = wallet_address
-                            
-                            session.commit()
+            # 1. Fetch Owners via Solana RPC (Direct On-Chain)
+            # This replaces the HowRare API call for ownership
+            owned_mints = await get_wallet_tokens(wallet_address)
             
-            # 2. Query DB for user's NFTs
+            if owned_mints:
+                # 2. Update ownership in DB
+                # First, clear old ownership for this wallet (optional but cleaner)
+                # session.query(FlexNFT).filter_by(owner_wallet=wallet_address).update({"owner_wallet": None})
+                
+                # Find which of these mints belong to our collection (exist in DB)
+                mints_in_db = session.query(FlexNFT).filter(
+                    FlexNFT.mint.in_(owned_mints),
+                    FlexNFT.collection_slug == collection_slug
+                ).all()
+                
+                # Update ownership
+                for nft in mints_in_db:
+                    nft.owner_wallet = wallet_address
+                
+                session.commit()
+            
+            # 3. Query DB for user's NFTs
             user_nfts = session.query(FlexNFT).filter_by(owner_wallet=wallet_address, collection_slug=collection_slug).all()
             
-            # Convert to dict-like structure to match previous logic
+            # Convert to dict-like structure
             results = []
             for nft in user_nfts:
                 results.append({
