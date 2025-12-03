@@ -9,6 +9,62 @@ from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
 HOWRARE_API_BASE = os.getenv("HOWRARE_API_BASE", "https://api.howrare.is/v0.1")
 DEFAULT_COLLECTION = os.getenv("HOWRARE_COLLECTION", "the_growerz")
 
+RARITY_CONFIGS = {
+    "the_growerz": {
+        "tiers": [
+            {"max_rank": 1, "name": "1/1", "color": 0xFFD700},
+            {"max_rank": 71, "name": "Mythic", "color": 0x9932CC},
+            {"max_rank": 361, "name": "Epic", "color": 0xFFA500},
+            {"max_rank": 843, "name": "Rare", "color": 0x1E90FF},
+            {"max_rank": 1446, "name": "Uncommon", "color": 0x32CD32},
+            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
+        ],
+        "special_attributes": [
+            {"trait_type": "Signed by haizeel", "value": "true", "name": "Signed", "color": 0xFFD700}
+        ]
+    },
+    "midevils": {
+        "tiers": [
+            # Total Supply: 5,000
+            # 1/1s: Rank 1-27
+            {"max_rank": 27, "name": "1/1", "color": 0xFFD700},
+            # Mythic (Top 1%): Rank 28-50
+            {"max_rank": 50, "name": "Mythic", "color": 0x9932CC},
+            # Legendary (Top 4%): Rank 51-200
+            {"max_rank": 200, "name": "Legendary", "color": 0xFFA500},
+            # Epic (Top 10%): Rank 201-500
+            {"max_rank": 500, "name": "Epic", "color": 0xFF4500},
+            # Rare (Top 30%): Rank 501-1500
+            {"max_rank": 1500, "name": "Rare", "color": 0x1E90FF},
+            # Uncommon (Top 60%): Rank 1501-3000
+            {"max_rank": 3000, "name": "Uncommon", "color": 0x32CD32},
+            # Common: Rank 3001+
+            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
+        ],
+        "special_attributes": []
+    }
+}
+
+def get_rarity_info(rank: int, attributes: list, collection_slug: str):
+    config = RARITY_CONFIGS.get(collection_slug)
+    
+    # Default fallback if config doesn't exist
+    if not config:
+        return "Ranked", 0x808080 # Grey
+
+    # 1. Check Special Attributes
+    for special in config.get("special_attributes", []):
+        for attr in attributes:
+            if attr.get('name') == special['trait_type'] and str(attr.get('value')).lower() == special['value'].lower():
+                return special['name'], special['color']
+
+    # 2. Check Rank Tiers
+    for tier in config.get("tiers", []):
+        if rank <= tier['max_rank']:
+            return tier['name'], tier['color']
+            
+    return "Common", 0xADFF2F
+
 class Flex(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -181,31 +237,7 @@ class Flex(commands.Cog):
             # Determine Color based on Rank
             rank = int(top_nft.get('rank', 999999))
             
-            # Check for "Signed by haizeel" attribute
-            is_signed = False
-            for attr in top_nft.get('attributes', []):
-                if attr.get('name') == "Signed by haizeel" and str(attr.get('value')).lower() == "true":
-                    is_signed = True
-                    break
-            
-            if is_signed or rank == 1:
-                color = 0xFFD700 # Gold (for 1/1 or Signed)
-                rarity_status = "1/1" if rank == 1 else "Signed"
-            elif 1 <= rank <= 71:
-                color = 0x9932CC # Mythic (Purple)
-                rarity_status = "Mythic"
-            elif 72 <= rank <= 361:
-                color = 0xFFA500 # Epic (Orange)
-                rarity_status = "Epic"
-            elif 362 <= rank <= 843:
-                color = 0x1E90FF # Rare (Blue)
-                rarity_status = "Rare"
-            elif 844 <= rank <= 1446:
-                color = 0x32CD32 # Uncommon (Green)
-                rarity_status = "Uncommon"
-            else:
-                color = 0xADFF2F # Common (Yellow-Green)
-                rarity_status = "Common"
+            rarity_status, color = get_rarity_info(rank, top_nft.get('attributes', []), collection_slug)
 
             # Build Embed
             embed = discord.Embed(title=f"{top_nft['name']}", color=color)
