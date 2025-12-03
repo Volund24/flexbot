@@ -2,7 +2,7 @@
 set -e # Exit immediately if a command exits with a non-zero status
 
 # Configuration
-SERVER_IP="172.235.53.198"
+SERVER_IP="your_ip"
 SERVER_USER="root"
 APP_DIR="/root/flexbot"
 REPO_URL="https://github.com/Volund24/flexbot.git"
