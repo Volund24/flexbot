@@ -64,8 +64,8 @@ ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
     else
         echo "Pulling latest changes..."
         git fetch origin
-        git checkout feature/async-admin-sync
-        git pull origin feature/async-admin-sync
+        # Force reset to match origin, discarding local changes
+        git reset --hard origin/feature/async-admin-sync
     fi
 
     echo "Building and starting Docker containers..."
