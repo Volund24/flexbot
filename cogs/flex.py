@@ -1,74 +1,19 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import aiohttp
 import os
 import random
 from shared.database import get_session, FlexPlayer, FlexGuildConfig, FlexNFT
 from shared.solana_utils import get_assets_by_owner
+from shared.rarity_config import RARITY_CONFIGS
 
 HOWRARE_API_BASE = os.getenv("HOWRARE_API_BASE", "https://api.howrare.is/v0.1")
 DEFAULT_COLLECTION = os.getenv("HOWRARE_COLLECTION", "the_growerz")
 
-RARITY_CONFIGS = {
-    "the_growerz": {
-        "tiers": [
-            {"max_rank": 1, "name": "1/1", "color": 0xFFD700},
-            {"max_rank": 71, "name": "Mythic", "color": 0x9932CC},
-            {"max_rank": 361, "name": "Epic", "color": 0xFFA500},
-            {"max_rank": 843, "name": "Rare", "color": 0x1E90FF},
-            {"max_rank": 1446, "name": "Uncommon", "color": 0x32CD32},
-            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
-        ],
-        "special_attributes": [
-            {"trait_type": "Signed by haizeel", "value": "true", "name": "Signed", "color": 0xFFD700}
-        ]
-    },
-    "midevils": {
-        "tiers": [
-            # Total Supply: 5,000
-            # 1/1s: Rank 1-27
-            {"max_rank": 27, "name": "1/1", "color": 0xFFD700},
-            # Mythic (Top 1%): Rank 28-50
-            {"max_rank": 50, "name": "Mythic", "color": 0x9932CC},
-            # Legendary (Top 4%): Rank 51-200
-            {"max_rank": 200, "name": "Legendary", "color": 0xFFA500},
-            # Epic (Top 10%): Rank 201-500
-            {"max_rank": 500, "name": "Epic", "color": 0xFF4500},
-            # Rare (Top 30%): Rank 501-1500
-            {"max_rank": 1500, "name": "Rare", "color": 0x1E90FF},
-            # Uncommon (Top 60%): Rank 1501-3000
-            {"max_rank": 3000, "name": "Uncommon", "color": 0x32CD32},
-            # Common: Rank 3001+
-            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
-        ],
-        "special_attributes": []
-    },
-    "gainz": {
-        "tiers": [
-            {"max_rank": 1, "name": "1/1", "color": 0xFFD700},
-            {"max_rank": 71, "name": "Mythic", "color": 0x9932CC},
-            {"max_rank": 361, "name": "Epic", "color": 0xFFA500},
-            {"max_rank": 843, "name": "Rare", "color": 0x1E90FF},
-            {"max_rank": 1446, "name": "Uncommon", "color": 0x32CD32},
-            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
-        ],
-        "special_attributes": []
-    },
-    "giga_buds": {
-        "tiers": [
-            {"max_rank": 1, "name": "1/1", "color": 0xFFD700},
-            {"max_rank": 71, "name": "Mythic", "color": 0x9932CC},
-            {"max_rank": 361, "name": "Epic", "color": 0xFFA500},
-            {"max_rank": 843, "name": "Rare", "color": 0x1E90FF},
-            {"max_rank": 1446, "name": "Uncommon", "color": 0x32CD32},
-            {"max_rank": 999999, "name": "Common", "color": 0xADFF2F},
-        ],
-        "special_attributes": []
-    }
-}
-
 def get_rarity_info(rank: int, attributes: list, collection_slug: str):
+    """
+    Determines the rarity name and color for a given rank and attributes based on the collection configuration.
+    """
     config = RARITY_CONFIGS.get(collection_slug)
     
     # Default fallback if config doesn't exist
@@ -89,10 +34,16 @@ def get_rarity_info(rank: int, attributes: list, collection_slug: str):
     return "Common", 0xADFF2F
 
 class Flex(commands.Cog):
+    """
+    Cog responsible for the main 'flex' functionality: displaying user NFTs with rarity info.
+    """
     def __init__(self, bot):
         self.bot = bot
 
     async def fetch_nfts(self, wallet_address: str, collection_slug: str):
+        """
+        Fetches NFTs for a wallet from the Solana RPC (DAS API) and merges with local DB data.
+        """
         session = get_session()
         try:
             # 1. Fetch Assets via Solana RPC (DAS API)
@@ -152,6 +103,9 @@ class Flex(commands.Cog):
             session.close()
 
     async def trait_autocomplete(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        """
+        Autocomplete function for the 'trait_filter' argument in the /flex command.
+        """
         session = get_session()
         try:
             # 1. Get User Wallet
@@ -192,6 +146,9 @@ class Flex(commands.Cog):
     @app_commands.command(name="flex", description="Flex your NFTs")
     @app_commands.autocomplete(trait_filter=trait_autocomplete)
     async def flex(self, interaction: discord.Interaction, trait_filter: str = None):
+        """
+        The main command to display a random NFT owned by the user, optionally filtered by trait.
+        """
         await interaction.response.defer()
         
         session = get_session()
