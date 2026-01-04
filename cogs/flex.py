@@ -51,53 +51,64 @@ class Flex(commands.Cog):
             assets = await get_assets_by_owner(wallet_address)
             
             if not assets:
+                # Clear ownership for this wallet if RPC says empty
+                session.query(FlexNFT).filter_by(owner_wallet=wallet_address).update({"owner_wallet": None})
+                session.commit()
                 return []
 
-            # Extract mints to query DB
-            owned_mints = [asset['mint'] for asset in assets]
+            # Create a map of live assets for easy lookup
+            asset_map = {asset['mint']: asset for asset in assets}
+            owned_mints = list(asset_map.keys())
             
-            # 2. Update ownership in DB (Optional but good for sync)
-            # Find which of these mints belong to our collection (exist in DB)
+            # 2. DB Operations
+            
+            # A. Clear ownership for NFTs that were owned by this wallet but are no longer in the live list
+            # This fixes "Incorrect Wallet Amounts" in autocomplete/DB queries
+            session.query(FlexNFT).filter(
+                FlexNFT.owner_wallet == wallet_address,
+                FlexNFT.mint.notin_(owned_mints)
+            ).update({"owner_wallet": None}, synchronize_session=False)
+
+            # B. Get existing NFTs from DB
             mints_in_db = session.query(FlexNFT).filter(
                 FlexNFT.mint.in_(owned_mints),
                 FlexNFT.collection_slug == collection_slug
             ).all()
             
-            # Update ownership
-            for nft in mints_in_db:
-                nft.owner_wallet = wallet_address
-            session.commit()
-            
-            # 3. Merge Live Data (Image/Name) with Static Data (Rank)
-            # We iterate over the DB results (which filters for the correct collection)
-            # and enrich them with the live image URL from the RPC response.
-            
-            # Create a lookup map for the live assets
-            asset_map = {asset['mint']: asset for asset in assets}
-            
             results = []
             for nft in mints_in_db:
                 live_asset = asset_map.get(nft.mint)
+                if not live_asset: continue
                 
-                # Use live image if available, else fallback to DB
-                image_url = live_asset.get('image') if live_asset else nft.image_url
+                # Update Owner
+                if nft.owner_wallet != wallet_address:
+                    nft.owner_wallet = wallet_address
                 
-                # If live image is missing or empty, fallback to DB
-                if not image_url:
-                    image_url = nft.image_url
-
+                # Update Attributes (Fixes "Stale Traits")
+                # We trust the live RPC data over the cached DB data for attributes
+                if live_asset.get('attributes'):
+                    nft.attributes = live_asset['attributes']
+                    
+                # Update Image
+                if live_asset.get('image'):
+                    nft.image_url = live_asset['image']
+                
                 results.append({
                     'name': nft.name,
                     'rank': nft.rank,
-                    'image': image_url,
+                    'image': nft.image_url,
                     'attributes': nft.attributes,
                     'mint': nft.mint
                 })
             
+            session.commit()
             return results
 
         except Exception as e:
             print(f"Error in fetch_nfts: {e}")
+            return []
+        finally:
+            session.close()
             return []
         finally:
             session.close()
